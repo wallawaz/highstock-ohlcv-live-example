@@ -1,0 +1,132 @@
+<html>
+
+<head>
+  <script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+  <script src="https://code.highcharts.com/stock/highstock.js"></script>
+  <script src="https://code.highcharts.com/stock/modules/exporting.js"></script>
+  <script type="text/javascript">
+  jQuery(document).ready(function ($) {
+    Highcharts.setOptions({
+        global: {
+            useUTC: false
+        }
+    })
+    function jsonOHLC(jsonObj) {
+        return [
+            jsonObj["ts"],
+            jsonObj["token_open"],
+            jsonObj["token_high"],
+            jsonObj["token_low"],
+            jsonObj["token_close"]
+        ];
+    }
+    function getTitleFromUrl() {
+        const url_split = window.location.href.split("/");
+        const title = url_split[url_split.length - 1].split(".")[0];
+        return title;
+    }
+    $.getJSON("./server/ohlcv.php", {}, function (chartData) {
+
+        const title = getTitleFromUrl();
+        const ohlc = [], volume = [];
+        const groupingUnits = [
+            ['week', [1]],
+            ['month', [1, 2, 3, 4, 6]]
+        ];
+        // initial load of data.
+        for (let i = 0; i < chartData.length; i++) {
+            ohlc.push(jsonOHLC(chartData[i]));
+            volume.push([chartData[i]["ts"], chartData[i]["token_volume"]]);
+        }
+        // create the chart
+        Highcharts.stockChart('container', {
+            chart: {
+                events: {
+                    load() {
+                        const ohlcSeries = this.series[0];
+                        const volumeSeries = this.series[1];
+                        setInterval(function () {
+                            const jqxhr = $.getJSON("./server/ohlcv.php").then(function (data) {
+                                console.log("success");
+
+                                // if new data contains more elements than `ohlcv` then new records have been added.
+                                if (ohlc.length < data.length) {
+                                    console.log('new one!');
+                                    for (let i = ohlc.length; i < data.length; i++) {
+                                        ohlcRecord = jsonOHLC(data[i]);
+                                        volumeRecord = [data[i]["ts"], data[i]["token_volume"]];
+                                        ohlc.push(jsonOHLC(data[i]));
+
+                                        // add new elements to the 2 series of the chart.
+                                        ohlcSeries.addPoint(ohlcRecord, true, true);
+                                        volumeSeries.addPoint(volumeRecord, true, true);
+                                    }
+                                }
+                            })
+                        }, 1500);
+                    }
+                }
+            },
+
+            rangeSelector: {
+                selected: 1
+            },
+            title: {
+                text: title
+            },
+            yAxis: [{
+                labels: {
+                    align: 'right',
+                    x: -3
+                },
+                title: {
+                    text: 'OHLC'
+                },
+                height: '60%',
+                lineWidth: 2,
+                resize: {
+                    enabled: true
+                }
+            }, {
+                labels: {
+                    align: 'right',
+                    x: -3
+                },
+                title: {
+                    text: 'Volume'
+                },
+                top: '65%',
+                height: '35%',
+                offset: 0,
+                lineWidth: 2
+            }],
+            tooltip: {
+                split: true
+            },
+            series: [{
+                type: 'candlestick',
+                name: pair,
+                data: ohlc,
+                dataGrouping: {
+                    units: groupingUnits
+                }
+            }, {
+                type: 'column',
+                name: 'Volume',
+                data: volume,
+                yAxis: 1,
+                dataGrouping: {
+                    units: groupingUnits
+                }
+            }]
+        });
+    });
+});
+</script>
+</head>
+
+<body>
+  <div id="container" style="height: 400px; min-width: 310px"></div>
+</body>
+
+</html>
